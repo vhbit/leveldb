@@ -397,7 +397,8 @@ class Benchmark {
   };
 
  private:
-  fdb_handle *db_;
+  fdb_file_handle *db_;
+  fdb_kvs_handle *kvs_;
   int db_num_;
   int64_t num_;
   int value_size_;
@@ -734,11 +735,20 @@ class Benchmark {
 //	fconfig.compaction_threshold = 0;
 	fconfig.compaction_mode = FDB_COMPACTION_AUTO;
 
-    // Create tuning options and open the database
-	rc = fdb_open(&db_, file_name, &fconfig);
-	if (rc) {
-      fprintf(stderr, "open error: %d\n", rc);
-    }
+        // Create tuning options and open the database
+        rc = fdb_open(&db_, file_name, &fconfig);
+
+        if (rc) {
+          fprintf(stderr, "open error: %d\n", rc);
+        }
+
+        fdb_kvs_config kvs_config = fdb_get_default_kvs_config();
+        // Create tuning options and open the database
+        rc = fdb_kvs_open(db_, &kvs_, NULL, &kvs_config);
+
+        if (rc) {
+          fprintf(stderr, "open kvs error: %d\n", rc);
+        }
   }
 
   void Write(ThreadState *thread) {
@@ -776,7 +786,7 @@ class Benchmark {
       bytes += value_size_ + klen;
 
 	  val = gen.Generate(value_size_).data();
-	  rc = fdb_set_kv(db_, key, klen, (void *)val, value_size_);
+	  rc = fdb_set_kv(kvs_, key, klen, (void *)val, value_size_);
       if (rc) {
         fprintf(stderr, "set error: %d\n", rc);
 		break;
@@ -802,7 +812,7 @@ class Benchmark {
 	int64_t bytes = 0;
 	int rc;
 
-	rc = fdb_iterator_init(db_, &iter, NULL, 0, NULL, 0, FDB_ITR_NONE);
+	rc = fdb_iterator_init(kvs_, &iter, NULL, 0, NULL, 0, FDB_ITR_NONE);
 	if (rc) {
       fprintf(stderr, "iterator error: %d\n", rc);
 	  return;
@@ -829,7 +839,7 @@ class Benchmark {
       const unsigned long k = thread->rand.Next() % FLAGS_num;
 	  klen = snprintf(ckey, sizeof(ckey), "%016lx", k);
 	  read++;
-	  if (!fdb_get_kv(db_, ckey, klen, (void **)&val, &vlen)) {
+	  if (!fdb_get_kv(kvs_, ckey, klen, (void **)&val, &vlen)) {
 		found++;
 		free(val);
 	  }
@@ -887,7 +897,7 @@ class Benchmark {
 
 	  klen = snprintf(key, sizeof(key), "%016lx", k);
 	  val = gen.Generate(value_size_).data();
-	  rc = fdb_set_kv(db_, key, klen, (void *)val, value_size_);
+	  rc = fdb_set_kv(kvs_, key, klen, (void *)val, value_size_);
 	  if (rc) {
 		fprintf(stderr, "put error: %d\n", rc);
 		exit(1);
